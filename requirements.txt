@@ -1,4 +1,4 @@
-openai==0.28.0
+openai
 streamlit==1.17.0
 PyPDF2==3.0.1
 altair==4.1.0
