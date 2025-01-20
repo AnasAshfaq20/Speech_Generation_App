@@ -1,37 +1,39 @@
-import openai
+from openai import OpenAI
 import streamlit as st
 from PyPDF2 import PdfReader
 
 # Set OpenAI API Key
 api_key = st.secrets["OPENAI_API_KEY"]
-client = openai.OpenAI(api_key=api_key)
+client = OpenAI(api_key=api_key)
 
-# Function to generate or enhance a speech
+# Function to generate or enhance a speech with streaming
 def process_speech(speech_text, enhance=False):
-    if enhance:
-        instruction = f"""
-        You are an assistant tasked with enhancing a speech. The provided speech is below:
-        
-        {speech_text}
-        
-        Please improve the structure, language, and flow. Make it more engaging and impactful while preserving the original message.
-        """
-    else:
-        instruction = f"""
-        You are an assistant tasked with creating a speech based entirely on the user-provided questions and answers below. Every detail provided in the QA must be used as context to shape the speech. The speech should be well-structured, engaging, and tailored to the event.
+    instruction = (
+        f"You are an assistant tasked with {'enhancing' if enhance else 'creating'} a speech."
+        f"\nSpeech Content:\n{speech_text}\n"
+        "Improve the structure, language, and flow to make it engaging and impactful."
+        if enhance
+        else f"""You are an assistant tasked with creating a speech based entirely on the user-provided questions and answers below. Every detail provided in the QA must be used as context to shape the speech. The speech should be well-structured, engaging, and tailored to the event.
 
         Questions and Answers:
         {speech_text}
 
-        Language: Generate the speech in detail in the language mentioned in the QA.
-        """
+        Language: Generate the speech in detail in the language mentioned in the QA."""
+    )
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4",
         messages=[{"role": "user", "content": instruction}],
-        stream=True
+        temperature=0.5,
+        stream=True,  # Enable streaming
     )
-    return response
+
+    # Collect the streamed response
+    full_response = ""
+    for part in response:
+        if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
+            full_response += part.choices[0].delta.content
+            yield part.choices[0].delta.content  # Yield each part as it comes
 
 # Function to extract text from uploaded PDF
 def extract_text_from_pdf(pdf_file):
@@ -41,19 +43,22 @@ def extract_text_from_pdf(pdf_file):
         text += page.extract_text()
     return text
 
-# Initialize Streamlit UI
+# Streamlit UI
 st.title("🎤 Speech Generator & Enhancer")
 
-# Tab-based UI for options
+# Initialize session state for speech data
+if 'generated_speech' not in st.session_state:
+    st.session_state.generated_speech = ""
+
+# Tab-based UI
 tab1, tab2 = st.tabs(["Generate New Speech", "Enhance Existing Speech"])
 
 # Tab 1: Generate New Speech
 with tab1:
     with st.form("speech_form"):
         st.header("Fill Out the Speech Questionnaire")
-
         # Collect user inputs
-        st.session_state.responses = {
+        responses = {
             "who_are_you": st.text_input("1. Who Are You?", placeholder="Best Man, Maid of Honor, etc."),
             "relationship_to_couple": st.text_input("2. Your Relationship to the Couple", placeholder="Groom's Brother, Bride's Friend, etc."),
             "names": st.text_input("3. Names/Nicknames (Bride, Groom, etc.)", placeholder="John (groom), Emma (bride)"),
@@ -64,55 +69,40 @@ with tab1:
             "qualities_groom": st.text_area("8. Qualities of the Groom", placeholder="His loyalty, sense of humor, etc."),
             "heartwarming_memory": st.text_area("9. Heartwarming Memory", placeholder="A special trip, meaningful conversation, etc."),
             "theme_message": st.text_area("10. Message or Theme", placeholder="Love, friendship, family, etc."),
-            "language": st.text_input("11. Language for the Speech", placeholder="e.g., English, Spanish, Urdu"),
+            "cultural_references": st.text_area("11. Include any specific cultural or religious references", placeholder="No specific references."),
+            "inside_jokes": st.text_area("12. Any inside jokes or personal references", placeholder="John's obsession with pineapple pizza."),
+            "end_with_toast": st.text_area("13. End the speech with a toast?", placeholder="Yes, please suggest a cheerful toast."),
+            "avoid_topics": st.text_area("14. Any topics or subjects to avoid?", placeholder="Avoid mentioning past relationships."),
+            "additional_info": st.text_area("15. Anything else to include?", placeholder="Additional details for the speech."),
+            "language": st.text_input("16. Language for the Speech", placeholder="e.g., English, Spanish, Urdu"),
         }
 
-        # Submit Button
         submitted = st.form_submit_button("Generate Speech")
 
 if submitted:
-    is_all_filled = all(value != "" for value in st.session_state.responses.values())
-    
-    if is_all_filled:
-        # Convert responses to QA format
-        qa_text = "\n".join([f"Q: {key.replace('_', ' ').title()} A: {value}" for key, value in st.session_state.responses.items() if value])
-
-        # Generate speech
-        if qa_text:
-            with st.spinner("Generating your personalized speech..."):
-                speech_placeholder = st.empty()
-                full_response = ""
-                for part in process_speech(qa_text):
-                    if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
-                        full_response += part.choices[0].delta.content
-                        speech_placeholder.markdown(f"**Your Speech (Generating...):**\n\n{full_response}▌")
-                speech_placeholder.markdown(f"**Your Final Speech:**\n\n{full_response}")
-            
-            # Store the generated speech in session state for further use
+    if all(value.strip() for value in responses.values()):
+        qa_text = "\n".join([f"Q: {key.replace('_', ' ').title()} A: {value}" for key, value in responses.items()])
+        with st.spinner("Generating your speech..."):
+            speech_placeholder = st.empty()
+            full_response = ""
+            for part in process_speech(qa_text):
+                full_response += part
+                speech_placeholder.markdown(f"**Your Speech (Generating...):**\n\n{full_response}▌")
             st.session_state.generated_speech = full_response
-
-            # Display the generated speech with options for further improvements
-            user_input = st.text_area("Provide further improvements or edits to the speech:")
-
-            # Button to regenerate speech based on user input
-            if st.button("Regenerate Speech with Improvements"):
-                if user_input:
-                    # Add the user's feedback to the conversation history
-                    st.session_state.conversation.append({"role": "user", "content": user_input})
-
-                    # Process the updated speech with new input
-                    with st.spinner("Re-generating speech based on your input..."):
-                        updated_speech = ""
-                        for part in process_speech("\n".join([msg['content'] for msg in st.session_state.conversation]), enhance=True):
-                            if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
-                                updated_speech += part.choices[0].delta.content
-
-                        # Display the updated speech
-                        st.write("**Updated Speech:**")
-                        st.markdown(updated_speech)
     else:
-        st.warning("Please fill in all fields to generate the speech.")
+        st.warning("Please fill out all fields.")
 
+if st.session_state.generated_speech:
+    user_input = st.text_area("Provide further improvements for the speech:", key="improvements")
+    if st.button("Regenerate Speech with Improvements"):
+        with st.spinner("Regenerating speech based on your input..."):
+            speech_placeholder = st.empty()
+            improved_speech = ""
+            for part in process_speech(f"{st.session_state.generated_speech}\n\nImprovements:\n{user_input}", enhance=True):
+                improved_speech += part
+                speech_placeholder.markdown(f"**Your Updated Speech (Generating...):**\n\n{improved_speech}▌")
+            st.session_state.generated_speech = improved_speech
+        
 # Tab 2: Enhance Existing Speech
 with tab2:
     st.header("Upload Your Speech (PDF)")
@@ -121,37 +111,27 @@ with tab2:
     if uploaded_file is not None:
         # Extract text from the uploaded PDF
         speech_text = extract_text_from_pdf(uploaded_file)
-        st.write("**Original Speech:**")
+        st.write("### Extracted Speech Text")
         st.write(speech_text)
 
-        # Enhance Speech Button
         if st.button("Enhance Speech"):
             with st.spinner("Enhancing your speech..."):
                 speech_placeholder = st.empty()
-                full_response = ""
+                enhanced_speech = ""
                 for part in process_speech(speech_text, enhance=True):
-                    if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
-                        full_response += part.choices[0].delta.content
-                        speech_placeholder.markdown(f"**Enhanced Speech (Generating...):**\n\n{full_response}▌")
-                speech_placeholder.markdown(f"**Your Enhanced Speech:**\n\n{full_response}")
+                    enhanced_speech += part
+                    speech_placeholder.markdown(f"**Your Enhanced Speech (Generating...):**\n\n{enhanced_speech}▌")
+                st.session_state.enhanced_speech = enhanced_speech
 
-                # Allow user to provide input for further edits after enhancement
-                st.session_state.conversation = [{"role": "user", "content": full_response}]
-                user_input = st.text_area("Provide further improvements or edits to the speech:")
 
-                # Button to regenerate speech based on user input
-                if st.button("Regenerate Enhanced Speech with Improvements"):
-                    if user_input:
-                        # Add the user's feedback to the conversation history
-                        st.session_state.conversation.append({"role": "user", "content": user_input})
-
-                        # Process the updated speech with new input
-                        with st.spinner("Re-generating enhanced speech based on your input..."):
-                            updated_speech = ""
-                            for part in process_speech("\n".join([msg['content'] for msg in st.session_state.conversation]), enhance=True):
-                                if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
-                                    updated_speech += part.choices[0].delta.content
-
-                            # Display the updated enhanced speech
-                            st.write("**Updated Enhanced Speech:**")
-                            st.markdown(updated_speech)
+        if st.session_state.enhanced_speech:
+            user_input = st.text_area("Provide further improvements for the enhanced speech:", key="enhance_improvements")
+            if st.button("Regenerate Enhanced Speech"):
+                with st.spinner("Regenerating enhanced speech based on your input..."):
+                    speech_placeholder = st.empty()
+                    further_enhanced_speech = ""
+                    for part in process_speech(f"{st.session_state.enhanced_speech}\n\nImprovements:\n{user_input}", enhance=True):
+                        further_enhanced_speech += part
+                        speech_placeholder.markdown(f"**Your futher enhanced Speech (Generating...):**\n\n{further_enhanced_speech}▌")
+                    st.session_state.enhanced_speech = further_enhanced_speech
+                
