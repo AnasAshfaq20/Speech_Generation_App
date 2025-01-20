@@ -103,6 +103,10 @@ if st.session_state.generated_speech:
                 speech_placeholder.markdown(f"**Your Updated Speech (Generating...):**\n\n{improved_speech}▌")
             st.session_state.generated_speech = improved_speech
         
+# Initialize session state for enhanced speech
+if 'enhanced_speech' not in st.session_state:
+    st.session_state.enhanced_speech = ""
+
 # Tab 2: Enhance Existing Speech
 with tab2:
     st.header("Upload Your Speech (PDF)")
@@ -123,7 +127,6 @@ with tab2:
                     speech_placeholder.markdown(f"**Your Enhanced Speech (Generating...):**\n\n{enhanced_speech}▌")
                 st.session_state.enhanced_speech = enhanced_speech
 
-
         if st.session_state.enhanced_speech:
             user_input = st.text_area("Provide further improvements for the enhanced speech:", key="enhance_improvements")
             if st.button("Regenerate Enhanced Speech"):
@@ -132,6 +135,5 @@ with tab2:
                     further_enhanced_speech = ""
                     for part in process_speech(f"{st.session_state.enhanced_speech}\n\nImprovements:\n{user_input}", enhance=True):
                         further_enhanced_speech += part
-                        speech_placeholder.markdown(f"**Your futher enhanced Speech (Generating...):**\n\n{further_enhanced_speech}▌")
+                        speech_placeholder.markdown(f"**Your Further Enhanced Speech (Generating...):**\n\n{further_enhanced_speech}▌")
                     st.session_state.enhanced_speech = further_enhanced_speech
-                
