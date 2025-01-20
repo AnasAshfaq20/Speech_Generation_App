@@ -70,51 +70,51 @@ with tab1:
         # Submit Button
         submitted = st.form_submit_button("Generate Speech")
 
-        # Check if all inputs are filled after button click
-        if submitted:
-            is_all_filled = all(value != "" for value in st.session_state.responses.values())
-            
-            if is_all_filled:
-                # Convert responses to QA format
-                qa_text = "\n".join([f"Q: {key.replace('_', ' ').title()} A: {value}" for key, value in st.session_state.responses.items() if value])
+    # Check if all inputs are filled after button click
+    if submitted:
+        is_all_filled = all(value != "" for value in st.session_state.responses.values())
+        
+        if is_all_filled:
+            # Convert responses to QA format
+            qa_text = "\n".join([f"Q: {key.replace('_', ' ').title()} A: {value}" for key, value in st.session_state.responses.items() if value])
 
-                # Generate speech
-                if qa_text:
-                    with st.spinner("Generating your personalized speech..."):
-                        speech_placeholder = st.empty()
-                        full_response = ""
-                        for part in process_speech(qa_text):
-                            if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
-                                full_response += part.choices[0].delta.content
-                                speech_placeholder.markdown(f"**Your Speech (Generating...):**\n\n{full_response}▌")
-                        speech_placeholder.markdown(f"**Your Final Speech:**\n\n{full_response}")
-                    
-                        # Display the generated speech and allow user input for further edits
-                        st.session_state.conversation = [{"role": "user", "content": full_response}]
-                        st.write("**Your Speech:**")
-                        st.markdown(full_response)
+            # Generate speech
+            if qa_text:
+                with st.spinner("Generating your personalized speech..."):
+                    speech_placeholder = st.empty()
+                    full_response = ""
+                    for part in process_speech(qa_text):
+                        if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
+                            full_response += part.choices[0].delta.content
+                            speech_placeholder.markdown(f"**Your Speech (Generating...):**\n\n{full_response}▌")
+                    speech_placeholder.markdown(f"**Your Final Speech:**\n\n{full_response}")
+                
+                    # Display the generated speech
+                    st.session_state.conversation = [{"role": "user", "content": full_response}]
+                    st.write("**Your Speech:**")
+                    st.markdown(full_response)
 
-                        # User input for further editing after speech generation
-                        user_input = st.text_area("Provide further improvements or edits to the speech:")
+                    # User input for further editing after speech generation
+                    user_input = st.text_area("Provide further improvements or edits to the speech:")
 
-                        # Button to regenerate speech based on user input
-                        if st.button("Regenerate Speech with Improvements"):
-                            if user_input:
-                                # Add the user's feedback to the conversation history
-                                st.session_state.conversation.append({"role": "user", "content": user_input})
+                    # Button to regenerate speech based on user input
+                    if st.button("Regenerate Speech with Improvements"):
+                        if user_input:
+                            # Add the user's feedback to the conversation history
+                            st.session_state.conversation.append({"role": "user", "content": user_input})
 
-                                # Process the updated speech with new input (just like generating new speech)
-                                with st.spinner("Re-generating speech based on your input..."):
-                                    updated_speech = ""
-                                    for part in process_speech("\n".join([msg['content'] for msg in st.session_state.conversation]), enhance=True):
-                                        if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
-                                            updated_speech += part.choices[0].delta.content
+                            # Process the updated speech with new input
+                            with st.spinner("Re-generating speech based on your input..."):
+                                updated_speech = ""
+                                for part in process_speech("\n".join([msg['content'] for msg in st.session_state.conversation]), enhance=True):
+                                    if hasattr(part.choices[0].delta, "content") and part.choices[0].delta.content:
+                                        updated_speech += part.choices[0].delta.content
 
-                                    # Display the updated speech
-                                    st.write("**Updated Speech:**")
-                                    st.markdown(updated_speech)
-            else:
-                st.warning("Please fill in all fields to generate the speech.")
+                                # Display the updated speech
+                                st.write("**Updated Speech:**")
+                                st.markdown(updated_speech)
+        else:
+            st.warning("Please fill in all fields to generate the speech.")
 
 # Tab 2: Enhance Existing Speech
 with tab2:
@@ -148,7 +148,7 @@ with tab2:
                         # Add the user's feedback to the conversation history
                         st.session_state.conversation.append({"role": "user", "content": user_input})
 
-                        # Process the updated speech with new input (just like enhancing speech)
+                        # Process the updated speech with new input
                         with st.spinner("Re-generating enhanced speech based on your input..."):
                             updated_speech = ""
                             for part in process_speech("\n".join([msg['content'] for msg in st.session_state.conversation]), enhance=True):
