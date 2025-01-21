@@ -22,7 +22,7 @@ def process_speech(speech_text, enhance=False):
     )
 
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": instruction}],
         temperature=0.5,
         stream=True,  # Enable streaming
